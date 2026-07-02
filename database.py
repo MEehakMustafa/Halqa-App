@@ -5,7 +5,11 @@ from sqlalchemy.orm import sessionmaker
 from core.config import DATABASE_URL
 
 # engine — manages the actual connection to PostgreSQL
-engine = create_engine(DATABASE_URL)
+# timezone=utc: timestamptz values come back as UTC, so Pydantic serializes
+# them with a trailing "Z" and browsers parse them unambiguously
+engine = create_engine(
+    DATABASE_URL, connect_args={"options": "-c timezone=utc"}
+)
 
 # SessionLocal — creates a new database session for each request
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

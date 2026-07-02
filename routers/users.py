@@ -1,40 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from database import get_db
+from models.halaqa import Halaqa
+from models.membership import Membership
+from models.post import Post
 from models.user import User
-from schemas.user import UserCreate, UserResponse, Token
-from core.auth import hash_password, verify_password, create_access_token, decode_access_token
+from schemas.halaqa import HalaqaResponse
+from schemas.post import PostResponse
+from schemas.user import UserCreate, UserUpdate, UserResponse, Token
+from core.auth import hash_password, verify_password, create_access_token, get_current_user
+from core.pagination import PageParams, paginate
 
 router = APIRouter()
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
-
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-) -> User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    payload = decode_access_token(token)
-    if payload is None:
-        raise credentials_exception
-
-    email: str = payload.get("sub")
-    if email is None:
-        raise credentials_exception
-
-    user = db.query(User).filter(User.email == email).first()
-    if user is None:
-        raise credentials_exception
-
-    return user
 
 
 @router.post("/register", response_model=UserResponse, status_code=201)
@@ -46,7 +25,8 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     new_user = User(
         name=user.name,
         email=user.email,
-        hashed_password=hash_password(user.password)
+        hashed_password=hash_password(user.password),
+        timezone=user.timezone
     )
     db.add(new_user)
     db.commit()
@@ -80,6 +60,57 @@ def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.patch("/me", response_model=UserResponse)
+def update_me(
+    updates: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    data = updates.model_dump(exclude_unset=True, exclude_none=True)
+    for field, value in data.items():
+        setattr(current_user, field, value)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.get("/me/halaqas", response_model=list[HalaqaResponse])
+def get_my_halaqas(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    page: PageParams = Depends()
+):
+    return paginate(
+        db.query(Halaqa)
+        .join(Membership, Membership.halaqa_id == Halaqa.id)
+        .filter(Membership.user_id == current_user.id)
+        .options(selectinload(Halaqa.memberships), joinedload(Halaqa.creator))
+        .order_by(Membership.joined_at.desc(), Halaqa.id.desc()),
+        page,
+    )
+
+
+@router.get("/me/feed", response_model=list[PostResponse])
+def get_my_feed(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    page: PageParams = Depends()
+):
+    """Posts from every halaqa the user belongs to, newest first."""
+    return paginate(
+        db.query(Post)
+        .join(Membership, Membership.halaqa_id == Post.halaqa_id)
+        .filter(Membership.user_id == current_user.id)
+        .options(
+            joinedload(Post.author),
+            joinedload(Post.halaqa),
+            selectinload(Post.comments),
+        )
+        .order_by(Post.created_at.desc(), Post.id.desc()),
+        page,
+    )
+
+
 @router.get("/users", response_model=list[UserResponse])
-def get_all_users(db: Session = Depends(get_db)):
-    return db.query(User).all()
+def get_all_users(db: Session = Depends(get_db), page: PageParams = Depends()):
+    return paginate(db.query(User).order_by(User.id), page)
