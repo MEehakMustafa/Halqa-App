@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -137,6 +137,8 @@ def update_goal(
 
     for field, value in data.items():
         setattr(goal, field, value)
+    if data:
+        goal.edited_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(goal)

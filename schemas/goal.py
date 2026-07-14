@@ -28,6 +28,7 @@ class GoalResponse(BaseModel):
     is_private: bool
     target_days: int | None
     created_at: datetime
+    edited_at: datetime | None
 
     class Config:
         from_attributes = True

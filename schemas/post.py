@@ -8,6 +8,10 @@ class PostCreate(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
 
 
+class PostUpdate(BaseModel):
+    content: str = Field(min_length=1, max_length=5000)
+
+
 class PostResponse(BaseModel):
     id: int
     content: str
@@ -17,6 +21,7 @@ class PostResponse(BaseModel):
     author_name: str
     comment_count: int
     created_at: datetime
+    edited_at: datetime | None
 
     class Config:
         from_attributes = True

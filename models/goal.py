@@ -15,6 +15,7 @@ class Goal(Base):
     is_private = Column(Boolean, default=False, nullable=False)
     target_days = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    edited_at = Column(DateTime(timezone=True), nullable=True)
 
     owner = relationship("User")
     halaqa = relationship("Halaqa")

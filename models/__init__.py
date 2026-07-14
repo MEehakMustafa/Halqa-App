@@ -5,3 +5,6 @@ from models.post import Post
 from models.comment import Comment
 from models.goal import Goal
 from models.checkin import CheckIn
+from models.refresh_token import RefreshToken
+from models.question import HalaqaQuestion
+from models.answer import QuestionAnswer

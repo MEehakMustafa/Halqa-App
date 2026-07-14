@@ -10,7 +10,13 @@ from models.user import User
 from schemas.halaqa import HalaqaResponse
 from schemas.post import PostResponse
 from schemas.user import UserCreate, UserUpdate, UserResponse, Token
-from core.auth import hash_password, verify_password, create_access_token, get_current_user
+from core.auth import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+    get_current_user,
+)
 from core.pagination import PageParams, paginate
 
 router = APIRouter()
@@ -48,9 +54,12 @@ def login(
         )
 
     token = create_access_token(data={"sub": user.email})
+    refresh_token = create_refresh_token(db, user.id)
+    db.commit()
 
     return {
         "access_token": token,
+        "refresh_token": refresh_token,
         "token_type": "bearer"
     }
 
@@ -109,8 +118,3 @@ def get_my_feed(
         .order_by(Post.created_at.desc(), Post.id.desc()),
         page,
     )
-
-
-@router.get("/users", response_model=list[UserResponse])
-def get_all_users(db: Session = Depends(get_db), page: PageParams = Depends()):
-    return paginate(db.query(User).order_by(User.id), page)

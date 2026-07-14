@@ -12,11 +12,15 @@ class Post(Base):
     halaqa_id = Column(Integer, ForeignKey("halaqas.id"), nullable=False)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    edited_at = Column(DateTime(timezone=True), nullable=True)
 
     author = relationship("User")
     halaqa = relationship("Halaqa")
     comments = relationship(
-        "Comment", back_populates="post", order_by="Comment.created_at"
+        "Comment",
+        back_populates="post",
+        order_by="Comment.created_at",
+        cascade="all, delete-orphan",
     )
 
     @property

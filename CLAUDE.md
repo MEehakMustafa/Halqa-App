@@ -34,13 +34,22 @@ main.py                — FastAPI app setup, includes routers, global exception
 database.py            — SQLAlchemy engine, SessionLocal, Base, get_db dependency
 alembic/               — migrations; env.py wires target_metadata to Base and reads
                          DATABASE_URL from .env (env var overrides .env)
-routers/users.py       — user routes (register, login, me, patch me, users) via APIRouter
+routers/auth.py        — POST /auth/refresh (rotates refresh token) and /auth/logout (revokes)
+routers/users.py       — user routes (register, login, me, patch me) via APIRouter;
+                         login returns an access + refresh token pair
 routers/halaqas.py     — halaqa routes (create, list public, get by id, join/leave/members,
                          create/list posts) + shared membership helpers (require_member,
                          require_can_view)
-routers/posts.py       — post routes (get single post with comments, create/list comments)
+routers/posts.py       — post routes (get single post with comments, patch/delete post,
+                         create/list comments) + comments_router (patch/delete comment);
+                         edit is author-only, delete is author-or-halaqa-admin
 routers/goals.py       — goal routes (create, my goals, patch/delete owner-only,
                          checkin/checkins/streak/stats) + streak math helpers
+routers/questions.py   — daily accountability questions: POST/GET today/GET history under
+                         /halaqas/{id}/questions (create is admin-only, reads member-only)
+                         + answers_router POST /questions/{id}/answer (member upsert;
+                         re-answering updates the row and sets edited_at; only open
+                         while active_date == the requester's own "today", else 403)
 models/user.py         — User ORM model (incl. timezone, IANA name, default UTC)
 models/halaqa.py       — Halaqa ORM model (FK to users via created_by)
 models/membership.py   — Membership ORM model (user_id + halaqa_id unique, role member/admin)
@@ -56,6 +65,14 @@ models/goal.py         — Goal ORM model (halaqa_id nullable = personal goal; i
 schemas/comment.py     — CommentCreate, CommentResponse
 models/checkin.py      — CheckIn ORM model (Date column; unique goal_id+user_id+date;
                          cascade-deleted with its Goal)
+models/refresh_token.py— RefreshToken ORM model (stores SHA-256 hash only; expires_at,
+                         revoked_at; rotated on every /auth/refresh)
+models/question.py     — HalaqaQuestion ORM model (active_date fixed at creation in the
+                         admin's timezone; unique halaqa_id+active_date = one/day)
+models/answer.py       — QuestionAnswer ORM model (bool answer + nullable reflection;
+                         unique question_id+user_id; cascade-deleted with its question)
+schemas/question.py    — QuestionCreate, AnswerSubmit, Question/Answer responses,
+                         TodayQuestionResponse (question + answers + pending_members)
 schemas/goal.py        — GoalCreate, GoalUpdate, GoalResponse
 schemas/checkin.py     — CheckInCreate, CheckInResponse, StreakResponse, StatsResponse
 core/config.py         — loads env vars from .env via python-dotenv

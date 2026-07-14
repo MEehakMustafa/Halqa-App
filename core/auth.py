@@ -1,10 +1,18 @@
+import hashlib
+import secrets
+
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from core.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from core.config import (
+    SECRET_KEY,
+    ALGORITHM,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    REFRESH_TOKEN_EXPIRE_DAYS,
+)
 from database import get_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -37,6 +45,36 @@ def decode_access_token(token: str) -> dict | None:
         return None
 
 
+def hash_refresh_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode()).hexdigest()
+
+
+def create_refresh_token(db: Session, user_id: int) -> str:
+    """Insert a refresh-token row (hash only) and return the raw token.
+    The caller is responsible for committing."""
+    from models.refresh_token import RefreshToken
+
+    raw_token = secrets.token_urlsafe(48)
+    db.add(
+        RefreshToken(
+            user_id=user_id,
+            token_hash=hash_refresh_token(raw_token),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        )
+    )
+    return raw_token
+
+
+def get_refresh_token_row(db: Session, raw_token: str):
+    from models.refresh_token import RefreshToken
+
+    return (
+        db.query(RefreshToken)
+        .filter(RefreshToken.token_hash == hash_refresh_token(raw_token))
+        .first()
+    )
+
+
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
@@ -67,21 +105,15 @@ def get_current_user_optional(
     token: str | None = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db)
 ):
-    """Like get_current_user, but returns None instead of raising 401.
+    """Like get_current_user, but anonymous (no token) is allowed.
 
     Used by routes that are public for public halaqas but need to know
-    who is asking when the halaqa is private.
+    who is asking when the halaqa is private. A token that IS sent but
+    is expired/invalid still raises 401 — silently downgrading to
+    anonymous would surface as 403 on private content, and clients
+    couldn't tell "please re-login" apart from "no access".
     """
     if token is None:
         return None
 
-    payload = decode_access_token(token)
-    if payload is None:
-        return None
-
-    email = payload.get("sub")
-    if email is None:
-        return None
-
-    from models.user import User
-    return db.query(User).filter(User.email == email).first()
+    return get_current_user(token=token, db=db)

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from routers import users, halaqas, posts, goals
+from routers import auth, users, halaqas, posts, goals, questions
 
 # Schema is managed by Alembic migrations ("alembic upgrade head"), not create_all.
 
@@ -26,10 +26,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(halaqas.router)
 app.include_router(posts.router)
+app.include_router(posts.comments_router)
 app.include_router(goals.router)
+app.include_router(questions.router)
+app.include_router(questions.answers_router)
 
 
 @app.exception_handler(IntegrityError)
